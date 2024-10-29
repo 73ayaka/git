@@ -1,3 +1,11 @@
+
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Oct 29 09:16:24 2024
+
+@author: AYAKA
+"""
+
 # -*- coding: utf-8 -*-
 """
 Created on Mon Oct 28 14:40:48 2024
@@ -39,52 +47,49 @@ rank_values = {
     'S': 7, 'A': 6, 'B': 5, 'C': 4, 'D': 3, 'E': 2, 'F': 1
 }
 
+# 学生クラスの定義
 class Student:
     def __init__(self, rank, application_start_day, offers, applications_per_cycle, application_cycle):
         self.rank = rank  # 学生のランク
-        self.application_start_day = application_start_day   
+        self.application_start_day = application_start_day  # 応募開始日
         self.offers = offers  # 受けた内定のリスト
-        self.applications_per_cycle = applications_per_cycle
-        self.application_cycle = application_cycle
+        self.applications_per_cycle = applications_per_cycle  # サイクルあたりの応募数
+        self.application_cycle = application_cycle  # 応募サイクルの日数
         self.has_job = False  # 内定を持っているかどうか
         self.job_rank = None  # 最終的に内定を受けた企業のランク
         self.total_applications = 0  # 応募した企業の総数
 
-    def apply_to_company(self, companies):
-        if len(companies) > 0:  # 応募する企業が存在する場合のみ
-            selected_companies = random.sample(companies, min(self.applications_per_cycle, len(companies)))  # 企業リストから指定された数の企業をランダムに選択
+    def apply_to_company(self, companies, day):
+        # 応募サイクルに基づいて応募を開始する日かどうかを確認
+        if day >= self.application_start_day and (day - self.application_start_day) % self.application_cycle == 0:
+            selected_companies = random.sample(companies, min(self.applications_per_cycle, len(companies)))  # 応募する企業をランダムに選択
             for company in selected_companies:
-                company.process_application(self)
+                company.process_application(self)  # 企業に応募を処理してもらう
                 self.total_applications += 1  # 応募数をカウント
 
     def decide_offer(self):
-        # 複数の内定がある場合、最も高いランクの企業の内定を保持
+        # 受けた内定がある場合、最も高いランクの企業からの内定を選択
         if self.offers:
-            highest_offer = max(self.offers, key=lambda c: rank_values[c.rank])  # 企業ランクの値で比較
-            # 学生は自分のランク以上の企業から内定を受け取った場合にのみ就職を決定
-            if rank_values[highest_offer.rank] >= rank_values[self.rank]:
-                self.has_job = True
-                self.job_rank = highest_offer.rank  # 内定を受けた企業のランクを記録
-                
-                # 辞退処理
-                for offer in self.offers:
+            highest_offer = max(self.offers, key=lambda c: rank_values[c.rank])  # 最も高いランクの企業を選ぶ
+            if rank_values[highest_offer.rank] >= rank_values[self.rank]:  # 内定の企業が学生のランク以上の場合
+                self.has_job = True  # 内定を持っていると設定
+                self.job_rank = highest_offer.rank  # 内定を受けた企業のランクを設定
+                for offer in self.offers:  # 他の内定を辞退する処理
                     if offer != highest_offer:
-                        offer.positions += 1  # 辞退した企業の採用枠を再開放
-                return highest_offer
-            
-        # 自分のランク以上の内定がない場合は応募を続ける
-        if not self.has_job:
+                        offer.positions += 1  # 企業の採用枠を増やす
+                return highest_offer  # 選択した内定を返す
+        if not self.has_job:  # 内定がない場合は、引き続き応募
             return "Continue applying"
-        
         return None
 
+# 企業クラスの定義
 class Company:
     def __init__(self, rank, positions):
         self.rank = rank  # 企業のランク
-        self.positions = positions  # 残りの採用枠
+        self.positions = positions  # 採用枠
 
     def process_application(self, student):
-        # 学生のランクに基づいて採用確率を決定
+        # 学生のランクに応じて内定の確率を決定
         if rank_values[self.rank] > rank_values[student.rank]:
             prob = offer_probabilities['higher']
         elif rank_values[self.rank] == rank_values[student.rank]:
@@ -92,24 +97,16 @@ class Company:
         else:
             prob = offer_probabilities['lower']
         
-        # ランダムな数を生成し、それが内定を受ける確率よりも小さい場合に学生を採用
-        if np.random.rand() < prob:
+        if np.random.rand() < prob:  # 確率に基づいて内定を出すか判断
             self.hire_student(student)
 
     def hire_student(self, student):
-        # 採用枠が残っていれば学生を採用
+        # 採用枠が残っている場合に学生を採用
         if self.positions > 0:
-            self.positions -= 1
-            student.offers.append(self)  # 内定を学生に追加
+            self.positions -= 1  # 採用枠を1減らす
+            student.offers.append(self)  # 学生の内定リストに追加
             return True
         return False
-
-    def handle_applications(self, students):
-        # 企業が学生からの応募を処理
-        for student in students:
-            if not student.has_job:  # 学生が内定を持っていない場合
-                student.apply_to_company([self])  # 学生の応募を処理
-                student.decide_offer()  # 最良の内定を選択
 
 # 学生の初期化
 def initialize_students():
@@ -123,91 +120,90 @@ def initialize_students():
 def initialize_companies():
     companies = []
     for rank in company_ranks:
-        companies += [Company(rank, positions_per_company) for _ in range(companies_per_rank)]
+        companies += [Company(rank, positions_per_company) for _ in range(companies_per_rank)]  # 各企業の初期化
     return companies
 
 # シミュレーションを実行し、内定状況を記録
 def run_simulation(companies):
-    students = initialize_students()  # 学生を初期化
-    score_stats = {rank: np.zeros(days_in_simulation) for rank in student_ranks}  # 各学生ランクの点数を記録
-    offer_rates = {rank: np.zeros(days_in_simulation) for rank in student_ranks}  # 内定率を記録
-    applications_stats = {rank: np.zeros(days_in_simulation) for rank in student_ranks}  # 応募数を記録
+    students = initialize_students()  # 学生の初期化
+    score_stats = {rank: np.zeros(days_in_simulation) for rank in student_ranks}  # 学生ランクごとのスコア記録
+    offer_rates = {rank: np.zeros(days_in_simulation) for rank in student_ranks}  # 学生ランクごとの内定率記録
+    applications_stats = {rank: np.zeros(days_in_simulation) for rank in student_ranks}  # 学生ランクごとの応募数記録
 
-    for day in range(days_in_simulation):
-        # 学生が180日以降、30日ごとに応募を開始
-        if day >= 180 and (day - 180) % 30 == 0:
-            for company in companies:
-                company.handle_applications(students)  # 企業が学生の応募を処理
+    for day in range(days_in_simulation):  # 日数のループ
+        for student in students:
+            student.apply_to_company(companies, day)  # 企業に応募
+            student.decide_offer()  # 内定の決定
 
-        # 各ランクの合計点数を記録
+        # 学生ランクごとの統計を更新
         for rank in student_ranks:
-            score_today = sum(rank_scores.get(s.job_rank, 0) for s in students if s.has_job and s.rank == rank)
-            score_stats[rank][day] = score_today / students_per_rank  # 学生数で割って平均を取る
-            
-            # 内定率を計算
-            offer_count = sum(1 for s in students if s.has_job and s.rank == rank)
-            offer_rates[rank][day] = offer_count / students_per_rank  # 内定を受けた学生の割合を計算
-            
-            # 応募数をカウント（各ランクの学生に対して）
-            applications_count = sum(s.total_applications for s in students if s.rank == rank)
+            score_today = sum(rank_scores.get(s.job_rank, 0) for s in students if s.has_job and s.rank == rank)  # 当日のスコアを計算
+            score_stats[rank][day] = score_today / students_per_rank  # 平均スコアを記録
+            offer_count = sum(1 for s in students if s.has_job and s.rank == rank)  # 内定を受けた学生の数
+            offer_rates[rank][day] = offer_count / students_per_rank  # 内定率を記録
+            applications_count = sum(s.total_applications for s in students if s.rank == rank)  # 応募数を計算
             applications_stats[rank][day] = applications_count / students_per_rank  # 平均応募数を記録
 
-    return score_stats, offer_rates, applications_stats  # すべての統計を返す
+    return score_stats, offer_rates, applications_stats  # 結果を返す
 
 # 複数回のシミュレーションを実行
 def run_multiple_simulations(num_simulations):
-    all_simulations_stats = {rank: np.zeros(days_in_simulation) for rank in student_ranks}
-    all_offer_rates = {rank: np.zeros(days_in_simulation) for rank in student_ranks}
-    all_applications_stats = {rank: np.zeros(days_in_simulation) for rank in student_ranks}
+    all_simulations_stats = {rank: np.zeros(days_in_simulation) for rank in student_ranks}  # 全シミュレーションのスコア
+    all_offer_rates = {rank: np.zeros(days_in_simulation) for rank in student_ranks}  # 全シミュレーションの内定率
+    all_applications_stats = {rank: np.zeros(days_in_simulation) for rank in student_ranks}  # 全シミュレーションの応募数
 
     for _ in range(num_simulations):
-        companies = initialize_companies()  # 企業を初期化
-        score_stats, offer_rates, applications_stats = run_simulation(companies)  # シミュレーションを実行
+        companies = initialize_companies()  # 企業の初期化
+        score_stats, offer_rates, applications_stats = run_simulation(companies)  # シミュレーション実行
         
-        # 統計を蓄積
+        # 統計を合計
         for rank in student_ranks:
             all_simulations_stats[rank] += score_stats[rank]
             all_offer_rates[rank] += offer_rates[rank]
             all_applications_stats[rank] += applications_stats[rank]
 
-    # 平均化して返す
+    # 平均を計算
     for rank in student_ranks:
         all_simulations_stats[rank] /= num_simulations
         all_offer_rates[rank] /= num_simulations
         all_applications_stats[rank] /= num_simulations
 
-    return all_simulations_stats, all_offer_rates, all_applications_stats
+    return all_simulations_stats, all_offer_rates, all_applications_stats  # 結果を返す
 
-# シミュレーションを実行して結果を表示
-score_stats, offer_rates, applications_stats = run_multiple_simulations(num_simulations)
-
-# グラフを描画
-def plot_results(score_stats, offer_rates, applications_stats):
-    fig, axs = plt.subplots(3, 1, figsize=(10, 15))
-
-    # 各統計を描画
+# 結果のプロット
+def plot_results(all_simulations_stats, all_offer_rates, all_applications_stats):
+    plt.figure(figsize=(10, 15))  # グラフのサイズを設定
+    # スコアのプロット
+    plt.subplot(3, 1, 1)
     for rank in student_ranks:
-        axs[0].plot(score_stats[rank], label=f'Rank {rank}')
-        axs[1].plot(offer_rates[rank], label=f'Rank {rank}')
-        axs[2].plot(applications_stats[rank], label=f'Rank {rank}')
+        plt.plot(all_simulations_stats[rank], label=f'Students of Rank {rank}')
+    plt.title('Average Score Over Time')  # タイトル
+    plt.xlabel('Days')  # x軸ラベル
+    plt.ylabel('Average Score')  # y軸ラベル
+    plt.legend()
 
-    # グラフの設定
-    axs[0].set_title('Average Score Over Time')
-    axs[0].set_xlabel('Days')
-    axs[0].set_ylabel('Average Score')
-    axs[0].legend()
+    # 内定率のプロット
+    plt.subplot(3, 1, 2)
+    for rank in student_ranks:
+        plt.plot(all_offer_rates[rank], label=f'Offer Rate for Rank {rank}')
+    plt.title('Average Offer Rate Over Time')  # タイトル
+    plt.xlabel('Days')  # x軸ラベル
+    plt.ylabel('Offer Rate')  # y軸ラベル
+    plt.legend()
 
-    axs[1].set_title('Offer Rates Over Time')
-    axs[1].set_xlabel('Days')
-    axs[1].set_ylabel('Offer Rate')
-    axs[1].legend()
+    # 応募数のプロット
+    plt.subplot(3, 1, 3)
+    for rank in student_ranks:
+        plt.plot(all_applications_stats[rank], label=f'Applications Count for Rank {rank}')
+    plt.title('Average Applications Count Over Time')  # タイトル
+    plt.xlabel('Days')  # x軸ラベル
+    plt.ylabel('Average Applications Count')  # y軸ラベル
+    plt.legend()
 
-    axs[2].set_title('Applications Stats Over Time')
-    axs[2].set_xlabel('Days')
-    axs[2].set_ylabel('Average Applications')
-    axs[2].legend()
+    plt.tight_layout()  # レイアウト調整
+    plt.show()  # グラフを表示
 
-    plt.tight_layout()
-    plt.show()
-
-plot_results(score_stats, offer_rates, applications_stats)
+# メイン処理
+if __name__ == "__main__":
+    all_simulations_stats, all_offer_rates, all_applications_stats = run_multiple_simulations(num_simulations)  # シミュレーション実行
+    plot_results(all_simulations_stats, all_offer_rates, all_applications_stats)  # 結果をプロット
